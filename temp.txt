@@ -1,0 +1,249 @@
+这个是原始版本：
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>会议登记系统 - 重置密码</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css">
+    <script>
+        function toggleTitleField() {
+            const roleTeacher = document.getElementById('role_teacher');
+            const titleDiv = document.getElementById('titleDiv');
+            titleDiv.style.display = roleTeacher.checked? 'block' : 'none';
+        }
+    </script>
+</head>
+
+<body class="bg-gray-100">
+    <div class="container mx-auto p-8">
+        <h1 class="text-3xl font-bold mb-4">会议登记系统重置密码</h1>
+        <?php
+        require_once'../PHPMailer/src/Exception.php';
+        require_once'../PHPMailer/src/PHPMailer.php';
+        require_once'../PHPMailer/src/SMTP.php';
+
+        use PHPMailer\PHPMailer\PHPMailer;
+        use PHPMailer\PHPMailer\Exception;
+
+        $mail = new PHPMailer(true);
+
+        session_start();
+
+        // 连接数据库
+        $db = new SQLite3('../db/users.db');
+
+        // 生成随机验证码
+        function generateVerificationCode()
+        {
+            $characters = '0123456789';
+            $codeLength = 6;
+            $verificationCode = '';
+            for ($i = 0; $i < $codeLength; $i++) {
+                $verificationCode.= $characters[rand(0, strlen($characters) - 1)];
+            }
+            return $verificationCode;
+        }
+
+        function sendVerificationEmail($email, $verificationCode)
+        {
+            global $mail;
+            $mail = new PHPMailer();
+            $mail->SMTPDebug = 0;
+            $mail->isSMTP();
+            $mail->SMTPAuth = true;
+            $mail->Host = 'smtp.qq.com';
+            $mail->SMTPSecure = 'ssl';
+            $mail->Port = 465;
+            $mail->CharSet = 'UTF-8';
+            $mail->FromName = '会议登记系统';
+            $mail->Username = '2353146641@qq.com';
+            $mail->Password = 'uhyakwikozofdhgc';
+            $mail->From = '2353146641@qq.com';
+            $mail->isHTML(false);
+            $mail->addAddress($email);
+            $mail->Subject = '会议登记系统重置密码验证码';
+            $mail->Body = "您的验证码是：$verificationCode 。请在 15 分钟内使用该验证码完成密码重置。";
+            $status = $mail->send();
+            return $status;
+        }
+
+        // 存储验证码到数据库临时表
+        function storeVerificationCode($email, $verificationCode)
+        {
+            $db = new SQLite3('../db/verification_codes.db');
+            $timestamp = time();
+            $db->exec("CREATE TABLE IF NOT EXISTS verification_codes (email TEXT, code TEXT, timestamp INTEGER)");
+            $stmt = $db->prepare("INSERT INTO verification_codes (email, code, timestamp) VALUES (?,?,?)");
+            $stmt->bindValue(1, $email);
+            $stmt->bindValue(2, $verificationCode);
+            $stmt->bindValue(3, $timestamp);
+            $stmt->execute();
+        }
+
+        // 验证验证码
+        function verifyVerificationCode($email, $code)
+        {
+            $db = new SQLite3('../db/verification_codes.db');
+            $query = "SELECT * FROM verification_codes WHERE email =? AND code =?";
+            $stmt = $db->prepare($query);
+            $stmt->bindValue(1, $email);
+            $stmt->bindValue(2, $code);
+            $result = $stmt->execute();
+            if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+                $timestamp = $row['timestamp'];
+                $currentTime = time();
+                if ($currentTime - $timestamp <= 900) { // 15 分钟 = 900 秒
+                    return true;
+                } else {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        $error = '';
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            // 获取用户提交的数据
+            $username = $_POST['username'];
+            $email = $_POST['email'];
+            $verificationCode = $_POST['verification_code'];
+            $newPassword = $_POST['new_password'];
+            $confirmNewPassword = $_POST['confirm_new_password'];
+
+            // 验证新密码和确认新密码是否一致
+            if ($newPassword!== $confirmNewPassword) {
+                $error = "两次输入的新密码不一致。";
+            } else {
+                // 验证邮箱验证码
+                if (!verifyVerificationCode($email, $verificationCode)) {
+                    $error = "验证码错误或已过期。";
+                } else {
+                    // 根据用户名和邮箱查找用户记录
+                    $query = "SELECT * FROM users WHERE username =? AND email =?";
+                    $stmt = $db->prepare($query);
+                    $stmt->bindValue(1, $username);
+                    $stmt->bindValue(2, $email);
+                    $result = $stmt->execute();
+                    if ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+                        // 处理密码哈希
+                        $password_hash = password_hash($newPassword, PASSWORD_DEFAULT);
+
+                        // 更新用户密码
+                        $updateQuery = "UPDATE users SET password_hash =? WHERE username =? AND email =?";
+                        $updateStmt = $db->prepare($updateQuery);
+                        $updateStmt->bindValue(1, $password_hash);
+                        $updateStmt->bindValue(2, $username);
+                        $updateStmt->bindValue(3, $email);
+                        $updateStmt->execute();
+
+                        // 弹窗提示密码重置成功
+                        echo "<script>alert('密码重置成功！'); window.location.href='login.php';</script>";
+                        exit();
+                    } else {
+                        $error = "用户名和邮箱不匹配。";
+                    }
+                }
+            }
+        }
+
+        if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['send_verification_code'])) {
+            $email = $_GET['email'];
+            $verificationCode = generateVerificationCode();
+            sendVerificationEmail($email, $verificationCode);
+            storeVerificationCode($email, $verificationCode);
+            echo "验证码已发送至您的邮箱，请查收。(go back to continue editing)";
+            exit();
+        }
+      ?>
+        <?php if ($error):?>
+            <p class="text-red-500 mb-4"><?= $error?></p>
+        <?php endif;?>
+        <form action="" method="post">
+            <div class="mb-4">
+                <label class="block text-gray-700 font-bold mb-2" for="username">
+                    username*
+                </label>
+                <input class="appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="text" name="username" required>
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700 font-bold mb-2" for="email">
+                    email*
+                </label>
+                <input class="appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="text" name="email" required>
+                <button type="button" onclick="sendVerificationCodeForReset()">获取验证码</button>
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700 font-bold mb-2" for="verification_code">
+                    验证码
+                </label>
+                <input class="appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="text" name="verification_code" required>
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700 font-bold mb-2" for="new_password">
+                    new password:
+                </label>
+                <input class="appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="password" name="new_password" required>
+            </div>
+            <div class="mb-4">
+                <label class="block text-gray-700 font-bold mb-2" for="confirm_new_password">
+                    confirm new password：
+                </label>
+                <input class="appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline" type="password" name="confirm_new_password" required>
+            </div>
+            <button class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline" type="submit">
+                重置密码
+            </button>
+        </form>
+    </div>
+    <script>
+        function sendVerificationCodeForReset() {
+            const emailInput = document.querySelector('input[name="email"]');
+            const email = emailInput.value;
+            if (email) {
+                window.location.href = `?send_verification_code=true&email=${email}`;
+            } else {
+                alert('请先输入邮箱地址。');
+            }
+        }
+    </script>
+</body>
+
+</html>
+
+这个是美化版本：
+
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>会议登记系统 - 重命名字段</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css">
+</head>
+
+<body class="bg-gray-100">
+    <div class="container mx-auto p-8">
+        <h1 class="text-3xl font-bold mb-4">重命名字段</h1>
+        <form action="process_rename_fields.php" method="post">
+            <?php
+            // 连接数据库获取表结构
+            $db = new SQLite3('../db/users.db');
+            $query = "PRAGMA table_info(users)";
+            $result = $db->query($query);
+            while ($row = $result->fetchArray(SQLITE3_ASSOC)) {
+                if ($row['name']!== 'id') {
+                    echo "<label class='block font-bold mb-2'>当前字段名：{$row['name']}</label>";
+                    echo "<input type='text' name='new_name_{$row['name']}' class='border border-gray-300 p-2 w-full'>";
+                }
+            }
+            $db->close();
+           ?>
+            <button type="submit" class="bg-blue-500 text-white p-2 mt-2">重命名</button>
+        </form>
+    </div>
+</body>
+
+</html>
+
+由于美化版本删除了很多原本的校验和逻辑，现在不再可用，请参照原始版本，输出具有完整功能的美化版本。

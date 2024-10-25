@@ -1,0 +1,7 @@
+# 忽略配置文件
+utils/email_config.json
+
+# 其他您可能想要忽略的文件
+__pycache__/
+*.pyc
+.vscode/

@@ -1,0 +1,151 @@
+<?php
+// 设置时区，根据您的需求进行调整
+date_default_timezone_set('Asia/Shanghai');
+
+// 日志文件路径
+$log_file = __DIR__ . '/../logs/database_test.log';
+
+/**
+ * 记录普通消息到日志文件
+ * 
+ * @param string $message 要记录的消息
+ */
+function log_message($message) {
+    global $log_file;
+    $timestamp = date('Y-m-d H:i:s');
+    $log_entry = "[{$timestamp}] INFO: {$message}\n";
+    file_put_contents($log_file, $log_entry, FILE_APPEND);
+}
+
+/**
+ * 记录错误消息到日志文件
+ * 
+ * @param string $message 要记录的错误消息
+ */
+function log_error($message) {
+    global $log_file;
+    $timestamp = date('Y-m-d H:i:s');
+    $log_entry = "[{$timestamp}] ERROR: {$message}\n";
+    file_put_contents($log_file, $log_entry, FILE_APPEND);
+}
+
+/**
+ * 清除日志文件内容
+ */
+function clear_log() {
+    global $log_file;
+    file_put_contents($log_file, '');
+}
+?>
+
+<?php
+// 清除旧的日志内容
+clear_log();
+
+// 设置错误报告
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+// 数据库文件路径
+$db_path = __DIR__ . '/../db/users.db';
+
+// 测试函数
+function test_database() {
+    global $db_path;
+    
+    try {
+        // 连接数据库
+        $db = new SQLite3($db_path);
+        log_message("数据库连接成功");
+
+        // 备份原始数据
+        $backup = $db->query("SELECT * FROM users")->fetchArray(SQLITE3_ASSOC);
+        log_message("原始数据备份成功");
+
+        // 测试插入
+        $insert_stmt = $db->prepare("INSERT INTO users (username, email, role) VALUES (:username, :email, :role)");
+        $insert_stmt->bindValue(':username', 'test_user', SQLITE3_TEXT);
+        $insert_stmt->bindValue(':email', 'test@example.com', SQLITE3_TEXT);
+        $insert_stmt->bindValue(':role', 'tester', SQLITE3_TEXT);
+        $result = $insert_stmt->execute();
+        
+        if ($result) {
+            log_message("插入测试数据成功");
+        } else {
+            throw new Exception("插入测试数据失败");
+        }
+
+        // 测试查询
+        $select_stmt = $db->prepare("SELECT * FROM users WHERE username = :username");
+        $select_stmt->bindValue(':username', 'test_user', SQLITE3_TEXT);
+        $result = $select_stmt->execute();
+        $row = $result->fetchArray(SQLITE3_ASSOC);
+        
+        if ($row) {
+            log_message("查询测试数据成功");
+        } else {
+            throw new Exception("查询测试数据失败");
+        }
+
+        // 测试更新
+        $update_stmt = $db->prepare("UPDATE users SET email = :email WHERE username = :username");
+        $update_stmt->bindValue(':email', 'updated@example.com', SQLITE3_TEXT);
+        $update_stmt->bindValue(':username', 'test_user', SQLITE3_TEXT);
+        $result = $update_stmt->execute();
+        
+        if ($result) {
+            log_message("更新测试数据成功");
+        } else {
+            throw new Exception("更新测试数据失败");
+        }
+
+        // 测试删除
+        $delete_stmt = $db->prepare("DELETE FROM users WHERE username = :username");
+        $delete_stmt->bindValue(':username', 'test_user', SQLITE3_TEXT);
+        $result = $delete_stmt->execute();
+        
+        if ($result) {
+            log_message("删除测试数据成功");
+        } else {
+            throw new Exception("删除测试数据失败");
+        }
+
+        // 还原数据库
+        $db->exec("DELETE FROM users");
+        $insert_stmt = $db->prepare("INSERT INTO users (id, username, email, role) VALUES (:id, :username, :email, :role)");
+        foreach ($backup as $key => $value) {
+            $insert_stmt->bindValue(':' . $key, $value, SQLITE3_TEXT);
+        }
+        $insert_stmt->execute();
+        log_message("数据库还原成功");
+
+        // 关闭数据库连接
+        $db->close();
+        log_message("数据库测试完成，所有操作成功");
+
+    } catch (Exception $e) {
+        log_error("数据库测试失败：" . $e->getMessage());
+        
+        // 尝试还原数据库
+        try {
+            $db = new SQLite3($db_path);
+            $db->exec("DELETE FROM users");
+            $insert_stmt = $db->prepare("INSERT INTO users (id, username, email, role) VALUES (:id, :username, :email, :role)");
+            foreach ($backup as $key => $value) {
+                $insert_stmt->bindValue(':' . $key, $value, SQLITE3_TEXT);
+            }
+            $insert_stmt->execute();
+            $db->close();
+            log_message("数据库已还原");
+        } catch (Exception $restore_e) {
+            log_error("数据库还原失败：" . $restore_e->getMessage());
+        }
+    }
+}
+
+// 执行测试
+test_database();
+
+// 输出日志
+echo "测试完成，请查看日志文件以获取详细信息。";
+?>

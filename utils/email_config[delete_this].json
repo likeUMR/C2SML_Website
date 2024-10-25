@@ -1,0 +1,8 @@
+{
+    "email": {
+      "sender": "",
+      "password": "",
+      "smtp_server": "",
+      "smtp_port": 0
+    }
+  }

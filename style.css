@@ -1,0 +1,9 @@
+.sidebar {
+    width: 200px;
+    float: left;
+    background-color: #f1f1f1;
+}
+
+.content {
+    margin-left: 200px;
+}
