@@ -74,7 +74,7 @@ The demo is live at: [https://c2sml.cn/submission/index.php](https://c2sml.cn/su
 ## 运行步骤
 
 1. **安装基本环境**  
-   确保您的服务器上已经安装了 Apache、MySQL 和 PHP。
+   确保您的服务器上已经安装了 Apache、MySQL 和 PHP（可使用WAMP or LAMP来迅速完成环境配置）。
 
 2. **克隆此仓库**  
    运行以下命令将仓库克隆到本地机器：
@@ -95,7 +95,7 @@ The demo is live at: [https://c2sml.cn/submission/index.php](https://c2sml.cn/su
    ```
 
 5. **运行应用程序**  
-   在浏览器中打开 `index.php`，尽情享受演示吧！
+   在浏览器中打开 `index.php`，尽情探索吧！
 
 ---
 
